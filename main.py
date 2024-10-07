@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from ultralytics import YOLO
 from io import BytesIO
 import numpy as np
+from fastapi.responses import FileResponse
 
 app = FastAPI()
 
@@ -63,7 +64,7 @@ def annotate_frame(frame, detections, person_count, head_count):
     
     text_x = frame_width - 200
     text_y_person = 30
-    text_y_head = 50
+    text_y_head = 60
 
     cv2.putText(annotated_frame, text, (text_x, text_y_person), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
     cv2.putText(annotated_frame, text_head, (text_x, text_y_head), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
@@ -120,16 +121,16 @@ async def upload_video(file: UploadFile = File(...)):
 
     # Gabungkan frame yang dianotasi menjadi video kembali
     height, width, _ = output_frames[0].shape
-    output = cv2.VideoWriter('output.mp4', cv2.VideoWriter_fourcc(*'mp4v'), 20, (width, height))
+    output_video_path = f"output_{file.filename}"
+    output = cv2.VideoWriter(output_video_path, cv2.VideoWriter_fourcc(*'mp4v'), 20, (width, height))
 
     for frame in output_frames:
         output.write(frame)
 
     output.release()
 
-    # Kembalikan file hasil dalam bentuk streaming response
-    file_stream = open("output.mp4", "rb")
-    return StreamingResponse(file_stream, media_type="video/mp4")
+    # Kembalikan video hasil sebagai file yang bisa di-download
+    return FileResponse(output_video_path, media_type="video/mp4", filename=output_video_path)
 
 # Endpoint untuk upload dan anotasi gambar
 @app.post("/upload_image/")
