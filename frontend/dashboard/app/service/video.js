@@ -8,7 +8,8 @@ export function Video() {
   const [file, setFile] = useState(null);
   const [videoUrl, setVideoUrl] = useState("");
   const [isUploading, setIsUploading] = useState(false); // State for upload status
-  const videoRef = useRef(null); // Ref for video element
+  const videoRef = useRef(null);
+  const videoRef2 = useRef(null); // Ref for video element
 
   // Fetch video URL from localStorage on component mount
   useEffect(() => {
@@ -61,67 +62,127 @@ export function Video() {
     }
   };
 
-  // Function to handle HLS video loading
-  useEffect(() => {
-    if (videoUrl && videoRef.current) {
-      const video = videoRef.current;
-      let hls;
+useEffect(() => {
+  if (videoUrl && videoRef.current) {
+    const video = videoRef.current;
+    let hls;
 
-      if (Hls.isSupported()) {
-        hls = new Hls({
-          debug: true,
-          enableWorker: true,
-          lowLatencyMode: true,
-          manifestLoadingTimeOut: 10000,
-          manifestLoadingMaxRetry: 5,
-          manifestLoadingRetryDelay: 1000,
-          levelLoadingTimeOut: 10000,
-          levelLoadingMaxRetry: 5,
-          levelLoadingRetryDelay: 1000,
-          fragLoadingTimeOut: 20000,
-          fragLoadingMaxRetry: 5,
-          fragLoadingRetryDelay: 1000,
-        });
+    if (Hls.isSupported()) {
+      hls = new Hls({
+        debug: true,
+        enableWorker: true,
+        lowLatencyMode: true,
+        manifestLoadingTimeOut: 10000,
+        manifestLoadingMaxRetry: 5,
+        manifestLoadingRetryDelay: 1000,
+        levelLoadingTimeOut: 10000,
+        levelLoadingMaxRetry: 5,
+        levelLoadingRetryDelay: 1000,
+        fragLoadingTimeOut: 20000,
+        fragLoadingMaxRetry: 5,
+        fragLoadingRetryDelay: 1000,
+      });
 
-        hls.loadSource("http://localhost:8000/hls_output/output.m3u8"); // Update source here
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          console.log("Manifest parsed, starting playback");
-          video.play();
-        });
+      hls.loadSource("http://localhost:8000/heatsmap/mapsoutput.m3u8"); // Update source here
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        console.log("Manifest parsed, starting playback");
+        video.play();
+      });
 
-        hls.on(Hls.Events.ERROR, (event, data) => {
-          if (data.fatal) {
-            switch (data.type) {
-              case Hls.ErrorTypes.NETWORK_ERROR:
-                console.log("Fatal network error encountered, trying to recover");
-                hls.startLoad();
-                break;
-              case Hls.ErrorTypes.MEDIA_ERROR:
-                console.log("Fatal media error encountered, trying to recover");
-                hls.recoverMediaError();
-                break;
-              default:
-                console.log("Fatal error, cannot recover");
-                hls.destroy();
-                break;
-            }
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              console.log("Fatal network error encountered, trying to recover");
+              hls.startLoad();
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              console.log("Fatal media error encountered, trying to recover");
+              hls.recoverMediaError();
+              break;
+            default:
+              console.log("Fatal error, cannot recover");
+              hls.destroy();
+              break;
           }
-        });
-      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = "http://localhost:8000/hls_output/output.m3u8";
-        video.addEventListener("loadedmetadata", () => {
-          video.play();
-        });
-      }
-
-      return () => {
-        if (hls) {
-          hls.destroy();
         }
-      };
+      });
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = "http://localhost:8000/heatsmap/output.m3u8";
+      video.addEventListener("loadedmetadata", () => {
+        video.play();
+      });
     }
-  }, [videoUrl]); // Reload HLS when videoUrl changes
+
+    return () => {
+      if (hls) {
+        hls.destroy();
+      }
+    };
+  }
+}, [videoUrl]);
+  // Function to handle HLS video loading
+  // useEffect(() => {
+  //   if (videoUrl && videoRef.current) {
+  //     const video = videoRef.current;
+  //     let hls;
+
+  //     if (Hls.isSupported()) {
+  //       hls = new Hls({
+  //         debug: true,
+  //         enableWorker: true,
+  //         lowLatencyMode: true,
+  //         manifestLoadingTimeOut: 10000,
+  //         manifestLoadingMaxRetry: 5,
+  //         manifestLoadingRetryDelay: 1000,
+  //         levelLoadingTimeOut: 10000,
+  //         levelLoadingMaxRetry: 5,
+  //         levelLoadingRetryDelay: 1000,
+  //         fragLoadingTimeOut: 20000,
+  //         fragLoadingMaxRetry: 5,
+  //         fragLoadingRetryDelay: 1000,
+  //       });
+
+  //       hls.loadSource("http://localhost:8000/hls_output/output.m3u8"); // Update source here
+  //       hls.attachMedia(video);
+  //       hls.on(Hls.Events.MANIFEST_PARSED, () => {
+  //         console.log("Manifest parsed, starting playback");
+  //         video.play();
+  //       });
+
+  //       hls.on(Hls.Events.ERROR, (event, data) => {
+  //         if (data.fatal) {
+  //           switch (data.type) {
+  //             case Hls.ErrorTypes.NETWORK_ERROR:
+  //               console.log("Fatal network error encountered, trying to recover");
+  //               hls.startLoad();
+  //               break;
+  //             case Hls.ErrorTypes.MEDIA_ERROR:
+  //               console.log("Fatal media error encountered, trying to recover");
+  //               hls.recoverMediaError();
+  //               break;
+  //             default:
+  //               console.log("Fatal error, cannot recover");
+  //               hls.destroy();
+  //               break;
+  //           }
+  //         }
+  //       });
+  //     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+  //       video.src = "http://localhost:8000/hls_output/output.m3u8";
+  //       video.addEventListener("loadedmetadata", () => {
+  //         video.play();
+  //       });
+  //     }
+
+  //     return () => {
+  //       if (hls) {
+  //         hls.destroy();
+  //       }
+  //     };
+  //   }
+  // }, [videoUrl]); // Reload HLS when videoUrl changes
 
   return (
     <div
@@ -134,6 +195,15 @@ export function Video() {
         <h5 className="text-2xl mb-2 font-bold tracking-tight text-gray-900">
           Human Detections
         </h5>
+        <div className="flex flex-col md:flex-row space-y-5 md:space-y-0 md:space-x-2 items-center justify-center relative z-10">
+        {/* <video
+          ref={videoRef} // Use ref for video element
+          className="w-80 h-96 border-2 aspect-video rounded-lg object-contain"
+          autoPlay
+          controls
+          loop
+          style={{ boxShadow: "5px 7px 2px rgba(0, 0, 0, 0.2)" }}
+        /> */}
         <video
           ref={videoRef} // Use ref for video element
           className="w-full h-96 border-2 aspect-video rounded-lg object-contain"
@@ -142,6 +212,7 @@ export function Video() {
           loop
           style={{ boxShadow: "5px 7px 2px rgba(0, 0, 0, 0.2)" }}
         />
+        </div>
       </div>
       <div className="mt-6">
         <label

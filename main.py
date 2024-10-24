@@ -11,13 +11,12 @@ from flasgger import Swagger, swag_from
 from flask_cors import CORS
 from vidgear.gears import VideoGear, WriteGear
 import threading
-import mimetypes
+from ultralytics.solutions import heatmap
 
 app = Flask(__name__)
 swagger = Swagger(app)
 CORS(app)
 
-# Akses folder untuk menyimpan video hasil
 OUTPUT_FOLDER = 'output_videos'
 if not os.path.exists(OUTPUT_FOLDER):
     os.makedirs(OUTPUT_FOLDER)
@@ -81,23 +80,72 @@ def annotate_frame(frame, detections, person_count, head_count):
 
     return annotated_frame
 
-# Fungsi untuk streaming dan mendeteksi
-def stream_and_detect(video_path):
-    conn = sqlite3.connect('detections.db')  # Koneksi baru untuk thread ini
-    cursor = conn.cursor()
-    
+def heatmaps(video_path):
+
+    heatmap_obj = heatmap.Heatmap()
     cap = cv2.VideoCapture(video_path)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = int(cap.get(cv2.CAP_PROP_FPS))
 
-    output_hls_folder = 'hls_output'
-    if not os.path.exists(output_hls_folder):
-        os.makedirs(output_hls_folder)
+    # Ensure heatmap output folder exists
+    output_heatsmap = 'output_heatsmap'
+    os.makedirs(output_heatsmap, exist_ok=True)
+    output_heatsmap_path = os.path.join(output_heatsmap, 'mapsoutput.m3u8')
 
+    heatmap_params = {
+        "-input_framerate": fps,
+        '-s': f'{width}x{height}',
+        "-vcodec": "libx264",
+        "-preset": "veryfast",  # Adjusted for better balance between speed and quality
+        "-tune": "zerolatency",
+        "-f": "hls",
+        "-hls_time": "2",
+        "-hls_list_size": "0",
+        "-hls_flags": "delete_segments",  # Automatically clean up segments
+        '-hls_segment_filename': os.path.join(output_heatsmap, 'segment_%03d.ts'),
+        "-g": str(fps * 2)  # Adjusted GOP size to match segment duration
+    }
+
+    # WriteGear for the heatmap HLS output
+    writer_hls2 = WriteGear(output=output_heatsmap_path, compression_mode=True, logging=True, **heatmap_params)
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        # Generate the heatmap
+        tracks = model.track(frame, persist=True)
+        frame_with_heatmap = heatmap_obj.generate_heatmap(frame, tracks)
+
+        # Write both normal and heatmap frames to respective HLS outputs
+        writer_hls2.write(frame_with_heatmap)
+
+    # Release resources
+    cap.release()
+    writer_hls2.close()
+
+# Fungsi untuk streaming dan mendeteksi
+def stream_and_detect(video_path):
+    # Database connection setup
+    conn = sqlite3.connect('detections.db')  
+    cursor = conn.cursor()
+
+    # Initialize heatmap object
+    cap = cv2.VideoCapture(video_path)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+
+    # Ensure HLS output folder exists
+    output_hls_folder = 'hls_output'
+    os.makedirs(output_hls_folder, exist_ok=True)
+
+    # Define HLS output paths
     hls_output_path = os.path.join(output_hls_folder, 'output.m3u8')
-    
-    output_params = {
+
+    # HLS output parameters for normal video
+    hls_params = {
         "-input_framerate": fps,
         '-s': f'{width}x{height}',
         "-vcodec": "libx264",
@@ -110,30 +158,35 @@ def stream_and_detect(video_path):
         '-hls_segment_filename': os.path.join(output_hls_folder, 'segment_%03d.ts'),
         "-g": "60"
     }
-    
-    writer_hls = WriteGear(
-        output=hls_output_path, 
-        compression_mode=True, 
-        logging=True, 
-        **output_params
-    )
+
+    # WriteGear for the regular HLS output
+    writer_hls1 = WriteGear(output=hls_output_path, compression_mode=True, logging=True, **hls_params)
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
         
+        # Detect objects and update the database
         detections, person_count, head_count = detect_objects(frame)
         save_detection(cursor, person_count, head_count)
+        
+        # Annotate the frame with detection info
         annotated_frame = annotate_frame(frame, detections, person_count, head_count)
+    
+        # Write both normal and heatmap frames to respective HLS outputs
+        writer_hls1.write(annotated_frame)
 
-        # Tulis frame ke output HLS
-        writer_hls.write(annotated_frame)
 
+    # Release resources
     cap.release()
-    writer_hls.close()
-    conn.close()  # Tutup koneksi database setelah selesai
+    writer_hls1.close()
+    conn.close()
 
+
+# ==================================================================================================================================
+# ==================================================================================================================================
+# ==================================================================================================================================
 # Endpoint untuk upload dan streaming video
 @app.route('/process_video/', methods=['POST'])
 @swag_from({
@@ -171,6 +224,7 @@ def process_video():
 
     # Menjalankan thread untuk streaming dan deteksi
     stream_thread = threading.Thread(target=stream_and_detect, args=(video_path,))
+    stream_thread = threading.Thread(target=heatmaps, args=(video_path,))
     stream_thread.start()
 
     return jsonify({"detail": "Video is being processed and streamed."}), 200
@@ -180,6 +234,22 @@ def process_video():
 def serve_hls(filename):
     # Tentukan file path
     file_path = 'D:/7. Project Mandiri/Python/Yolov11/hls_output'
+
+    # Tentukan MIME type berdasarkan file extension
+    if filename.endswith('.m3u8'):
+        mimetype = 'application/vnd.apple.mpegurl'
+    elif filename.endswith('.ts'):
+        mimetype = 'video/mp2t'
+    else:
+        mimetype = None
+
+    # Sajikan file dengan MIME type yang tepat
+    return send_from_directory(file_path, filename, mimetype=mimetype)
+
+@app.route('/heatsmap/<path:filename>')
+def serve_heatsmap(filename):
+    # Tentukan file path
+    file_path = 'D:/7. Project Mandiri/Python/Yolov11/output_heatsmap'
 
     # Tentukan MIME type berdasarkan file extension
     if filename.endswith('.m3u8'):
