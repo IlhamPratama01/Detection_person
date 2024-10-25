@@ -138,11 +138,9 @@ def stream_and_detect(video_path):
     fps = int(cap.get(cv2.CAP_PROP_FPS))
 
     # Ensure HLS output folder exists
-    output_hls_folder = 'hls_output'
-    os.makedirs(output_hls_folder, exist_ok=True)
-
-    # Define HLS output paths
-    hls_output_path = os.path.join(output_hls_folder, 'output.m3u8')
+    hls_output = 'hls_output'
+    os.makedirs(hls_output, exist_ok=True)
+    hls_output_path = os.path.join(hls_output, 'output.m3u8')
 
     # HLS output parameters for normal video
     hls_params = {
@@ -155,7 +153,7 @@ def stream_and_detect(video_path):
         "-hls_time": "2",
         "-hls_list_size": "0",
         "-hls_flags": "append_list",
-        '-hls_segment_filename': os.path.join(output_hls_folder, 'segment_%03d.ts'),
+        '-hls_segment_filename': os.path.join(hls_output, 'segment_%03d.ts'),
         "-g": "60"
     }
 
@@ -183,10 +181,6 @@ def stream_and_detect(video_path):
     writer_hls1.close()
     conn.close()
 
-
-# ==================================================================================================================================
-# ==================================================================================================================================
-# ==================================================================================================================================
 # Endpoint untuk upload dan streaming video
 @app.route('/process_video/', methods=['POST'])
 @swag_from({
@@ -224,8 +218,9 @@ def process_video():
 
     # Menjalankan thread untuk streaming dan deteksi
     stream_thread = threading.Thread(target=stream_and_detect, args=(video_path,))
-    stream_thread = threading.Thread(target=heatmaps, args=(video_path,))
+    heatmap_thread = threading.Thread(target=heatmaps, args=(video_path,))
     stream_thread.start()
+    heatmap_thread.start()
 
     return jsonify({"detail": "Video is being processed and streamed."}), 200
 
