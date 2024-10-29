@@ -106,7 +106,6 @@ export function Video() {
               autoPlay
               controls
               loop
-              style={{ boxShadow: "5px 7px 2px rgba(0, 0, 0, 0.2)" }}
             />
           ) : (
             <video
@@ -115,7 +114,6 @@ export function Video() {
               autoPlay
               controls
               loop
-              style={{ boxShadow: "5px 7px 2px rgba(0, 0, 0, 0.2)" }}
             />
           )}
         </div>

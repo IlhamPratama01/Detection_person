@@ -11,6 +11,8 @@ from flasgger import Swagger, swag_from
 from flask_cors import CORS
 from vidgear.gears import VideoGear, WriteGear
 import threading
+import matplotlib.pyplot as plt
+import numpy as np
 from ultralytics.solutions import heatmap
 
 app = Flask(__name__)
@@ -81,45 +83,65 @@ def annotate_frame(frame, detections, person_count, head_count):
     return annotated_frame
 
 def heatmaps(video_path):
-
+    # Initialize heatmap generator and video capture
     heatmap_obj = heatmap.Heatmap()
     cap = cv2.VideoCapture(video_path)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = int(cap.get(cv2.CAP_PROP_FPS))
 
-    # Ensure heatmap output folder exists
-    output_heatsmap = 'output_heatsmap'
-    os.makedirs(output_heatsmap, exist_ok=True)
-    output_heatsmap_path = os.path.join(output_heatsmap, 'mapsoutput.m3u8')
+    # Output directory
+    output_heatmap_folder = 'output_heatsmap'
+    os.makedirs(output_heatmap_folder, exist_ok=True)
+    output_heatmap_path = os.path.join(output_heatmap_folder, 'mapsoutput.m3u8')
 
+    # Initialize accumulation heatmap matrix
+    heatmap_accumulator = np.zeros((height, width), dtype=np.float32)
+
+    # Parameters for HLS stream
     heatmap_params = {
         "-input_framerate": fps,
         '-s': f'{width}x{height}',
         "-vcodec": "libx264",
-        "-preset": "veryfast",  # Adjusted for better balance between speed and quality
+        "-preset": "veryfast",
         "-tune": "zerolatency",
         "-f": "hls",
         "-hls_time": "2",
         "-hls_list_size": "0",
-        "-hls_flags": "delete_segments",  # Automatically clean up segments
-        '-hls_segment_filename': os.path.join(output_heatsmap, 'segment_%03d.ts'),
-        "-g": str(fps * 2)  # Adjusted GOP size to match segment duration
+        "-hls_flags": "delete_segments",
+        '-hls_segment_filename': os.path.join(output_heatmap_folder, 'segment_%03d.ts'),
+        "-g": str(fps * 2)
     }
 
-    # WriteGear for the heatmap HLS output
-    writer_hls2 = WriteGear(output=output_heatsmap_path, compression_mode=True, logging=True, **heatmap_params)
+    # WriteGear for HLS output
+    writer_hls2 = WriteGear(output=output_heatmap_path, compression_mode=True, logging=True, **heatmap_params)
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-        # Generate the heatmap
-        tracks = model.track(frame, persist=True)
-        frame_with_heatmap = heatmap_obj.generate_heatmap(frame, tracks)
 
-        # Write both normal and heatmap frames to respective HLS outputs
-        writer_hls2.write(frame_with_heatmap)
+        # Detect objects and generate per-frame heatmap
+        tracks = model.track(frame, persist=True)
+        frame_heatmap = heatmap_obj.generate_heatmap(frame, tracks)
+
+        # Accumulate heatmap by adding intensities
+        gray_frame_heatmap = cv2.cvtColor(frame_heatmap, cv2.COLOR_BGR2GRAY)
+        heatmap_accumulator += gray_frame_heatmap.astype(np.float32)  # Accumulate over time
+
+        # Write current frame heatmap to HLS stream
+        writer_hls2.write(frame_heatmap)
+
+    # Normalize accumulated heatmap to [0, 255] range
+    normalized_heatmap = cv2.normalize(heatmap_accumulator, None, 0, 255, cv2.NORM_MINMAX)
+    normalized_heatmap = normalized_heatmap.astype(np.uint8)
+
+    # Apply colormap to make heatmap visual (e.g., red for high intensity)
+    final_heatmap_img = cv2.applyColorMap(normalized_heatmap, cv2.COLORMAP_JET)
+
+    # Save the final heatmap image
+    final_heatmap_path = os.path.join(output_heatmap_folder, 'final_heatmap.png')
+    cv2.imwrite(final_heatmap_path, final_heatmap_img)
 
     # Release resources
     cap.release()
