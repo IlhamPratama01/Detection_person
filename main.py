@@ -103,12 +103,12 @@ def heatmaps(video_path):
         "-input_framerate": fps,
         '-s': f'{width}x{height}',
         "-vcodec": "libx264",
-        "-preset": "veryfast",
+        "-preset": "ultrafast",
         "-tune": "zerolatency",
         "-f": "hls",
         "-hls_time": "2",
         "-hls_list_size": "0",
-        "-hls_flags": "delete_segments",
+        "-hls_flags": "append_list",
         '-hls_segment_filename': os.path.join(output_heatmap_folder, 'segment_%03d.ts'),
         "-g": str(fps * 2)
     }
@@ -176,7 +176,7 @@ def stream_and_detect(video_path):
         "-hls_list_size": "0",
         "-hls_flags": "append_list",
         '-hls_segment_filename': os.path.join(hls_output, 'segment_%03d.ts'),
-        "-g": "60"
+        "-g": str(fps * 2)
     }
 
     # WriteGear for the regular HLS output
