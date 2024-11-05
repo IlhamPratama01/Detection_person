@@ -18,7 +18,6 @@ class Heatmap:
 
     def __init__(
         self,
-        names,
         colormap=cv2.COLORMAP_JET,
         view_img=False,
         view_in_counts=True,
@@ -39,7 +38,7 @@ class Heatmap:
         self.shape = shape
 
         self.initialized = False
-        self.names = names  # Classes names
+ # Classes names
 
         # Image information
         self.im0 = None
@@ -137,8 +136,7 @@ class Heatmap:
 
             for box, cls, track_id in zip(self.boxes, self.clss, self.track_ids):
                 # Store class info
-                if self.names[cls] not in self.class_wise_count:
-                    self.class_wise_count[self.names[cls]] = {"IN": 0, "OUT": 0}
+                
 
                 if self.shape == "circle":
                     center = (int((box[0] + box[2]) // 2), int((box[1] + box[3]) // 2))
@@ -170,12 +168,7 @@ class Heatmap:
                         if prev_position is not None and is_inside and track_id not in self.count_ids:
                             self.count_ids.append(track_id)
 
-                            if (box[0] - prev_position[0]) * (self.counting_region.centroid.x - prev_position[0]) > 0:
-                                self.in_counts += 1
-                                self.class_wise_count[self.names[cls]]["IN"] += 1
-                            else:
-                                self.out_counts += 1
-                                self.class_wise_count[self.names[cls]]["OUT"] += 1
+                            
 
                     # Count objects using line
                     elif len(self.count_reg_pts) == 2:
@@ -184,14 +177,7 @@ class Heatmap:
                             if distance < self.line_dist_thresh and track_id not in self.count_ids:
                                 self.count_ids.append(track_id)
 
-                                if (box[0] - prev_position[0]) * (
-                                    self.counting_region.centroid.x - prev_position[0]
-                                ) > 0:
-                                    self.in_counts += 1
-                                    self.class_wise_count[self.names[cls]]["IN"] += 1
-                                else:
-                                    self.out_counts += 1
-                                    self.class_wise_count[self.names[cls]]["OUT"] += 1
+                               
 
         else:
             for box, cls in zip(self.boxes, self.clss):
@@ -244,6 +230,5 @@ class Heatmap:
             return
 
 
-if __name__ == "__main__":
-    classes_names = {0: "person", 1: "car"}  # example class names
-    heatmap = Heatmap(classes_names)
+if __name__ == "__main__":  # example class names
+    heatmap = Heatmap()
