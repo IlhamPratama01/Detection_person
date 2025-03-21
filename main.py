@@ -81,61 +81,57 @@ def annotate_frame(frame, detections, person_count, head_count):
 
     return annotated_frame
 
-def heatmaps(video_path, unique_id):
-    heatmap_obj = heatmap.Heatmap()
-    cap = cv2.VideoCapture(video_path)
-    fps = int(cap.get(cv2.CAP_PROP_FPS))
+# def heatmaps(video_path, unique_id):
+#     heatmap_obj = heatmap.Heatmap()
+#     cap = cv2.VideoCapture(video_path)
+#     fps = int(cap.get(cv2.CAP_PROP_FPS))
 
-    output_heatmap_folder = f'output_heatsmap/{unique_id}'
-    os.makedirs(output_heatmap_folder, exist_ok=True)
-    output_heatmap_path = os.path.join(output_heatmap_folder, 'mapsoutput.m3u8')
+#     output_heatmap_folder = f'output_heatsmap/{unique_id}'
+#     os.makedirs(output_heatmap_folder, exist_ok=True)
+#     output_heatmap_path = os.path.join(output_heatmap_folder, 'mapsoutput.m3u8')
 
-    # Set consistent frame dimensions
-    FRAME_WIDTH = 640  # Desired frame width
-    FRAME_HEIGHT = 360  # Desired frame height
-    heatmap_accumulator = np.zeros((FRAME_HEIGHT, FRAME_WIDTH), dtype=np.float32)  # Match accumulator dimensions
+#     # Set consistent frame dimensions
+#     FRAME_WIDTH = 640  # Desired frame width
+#     FRAME_HEIGHT = 360  # Desired frame height# Match accumulator dimensions
 
-    heatmap_params = {
-        "-input_framerate": fps,
-        '-s': f'{FRAME_WIDTH}x{FRAME_HEIGHT}',  # Match the new dimensions
-        "-vcodec": "libx264",
-        "-preset": "ultrafast",
-        "-tune": "zerolatency",
-        "-f": "hls",
-        "-hls_time": "2",
-        "-hls_list_size": "0",
-        "-hls_flags": "append_list",
-        '-hls_segment_filename': os.path.join(output_heatmap_folder, 'segment_%03d.ts'),
-        "-g": str(fps * 2)
-    }
-    writer_hls2 = WriteGear(output=output_heatmap_path, compression_mode=True, logging=True, **heatmap_params)
+#     heatmap_params = {
+#         "-input_framerate": fps,
+#         '-s': f'{FRAME_WIDTH}x{FRAME_HEIGHT}',  # Match the new dimensions
+#         "-vcodec": "libx264",
+#         "-preset": "ultrafast",
+#         "-tune": "zerolatency",
+#         "-f": "hls",
+#         "-hls_time": "2",
+#         "-hls_list_size": "0",
+#         "-hls_flags": "append_list",
+#         '-hls_segment_filename': os.path.join(output_heatmap_folder, 'segment_%03d.ts'),
+#         "-g": str(fps * 2)
+#     }
+#     writer_hls2 = WriteGear(output=output_heatmap_path, compression_mode=True, logging=True, **heatmap_params)
     
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+#     while True:
+#         ret, frame = cap.read()
+#         if not ret:
+#             break
         
-        # Resize frame to match heatmap dimensions
-        frame = cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT))
+#         # Resize frame to match heatmap dimensions
+#         frame = cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT))
         
-        # Perform tracking and generate heatmap frame
-        tracks = model.track(frame, persist=True)
-        frame_heatmap = heatmap_obj.generate_heatmap(frame, tracks)
+#         # Perform tracking and generate heatmap frame
+#         tracks = model.track(frame, persist=True)
+#         frame_heatmap = heatmap_obj.generate_heatmap(frame, tracks)
         
-        # Convert to grayscale for accumulation
-        gray_frame_heatmap = cv2.cvtColor(frame_heatmap, cv2.COLOR_BGR2GRAY)
-        heatmap_accumulator += gray_frame_heatmap.astype(np.float32)
-        
-        # Write heatmap frame to the output
-        writer_hls2.write(frame_heatmap)
+#         # Write heatmap frame to the output
+#         writer_hls2.write(frame_heatmap)
 
-    cap.release()
-    writer_hls2.close()
+#     cap.release()
+#     writer_hls2.close()
 
 
 def stream_and_detect(video_path, unique_id):
     conn = setup_database()
     cursor = conn.cursor()
+    heatmap_obj = heatmap.Heatmap()
     cap = cv2.VideoCapture(video_path)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -172,6 +168,8 @@ def stream_and_detect(video_path, unique_id):
         detections, person_count, head_count = detect_objects(frame)
         save_detection(cursor, person_count, head_count)
         annotated_frame = annotate_frame(frame, detections, person_count, head_count)
+        tracks = model.track(frame, persist=True)
+        annotated_frame = heatmap_obj.generate_heatmap(frame, tracks)
         writer_hls1.write(annotated_frame)
 
     cap.release()
@@ -207,7 +205,7 @@ def process_video():
     file.save(video_path)
 
     threading.Thread(target=stream_and_detect, args=(video_path, unique_id)).start()
-    threading.Thread(target=heatmaps, args=(video_path, unique_id)).start()
+    # threading.Thread(target=heatmaps, args=(video_path, unique_id)).start()
     subprocess.Popen(["python", "main.py", video_path, unique_id], close_fds=True)
 
     return jsonify({"detail": "Video is being processed and streamed.", "unique_id": unique_id}), 200
@@ -218,11 +216,11 @@ def serve_hls(unique_id, filename):
     mimetype = 'application/vnd.apple.mpegurl' if filename.endswith('.m3u8') else 'video/mp2t'
     return send_from_directory(file_path, filename, mimetype=mimetype)
 
-@app.route('/heatsmap/<unique_id>/<path:filename>')
-def serve_heatsmap(unique_id, filename):
-    file_path = f'output_heatsmap/{unique_id}'
-    mimetype = 'application/vnd.apple.mpegurl' if filename.endswith('.m3u8') else 'video/mp2t'
-    return send_from_directory(file_path, filename, mimetype=mimetype)
+# @app.route('/heatsmap/<unique_id>/<path:filename>')
+# def serve_heatsmap(unique_id, filename):
+#     file_path = f'output_heatsmap/{unique_id}'
+#     mimetype = 'application/vnd.apple.mpegurl' if filename.endswith('.m3u8') else 'video/mp2t'
+#     return send_from_directory(file_path, filename, mimetype=mimetype)
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8000)
