@@ -7,22 +7,21 @@ import Hls from "hls.js";
 export function Video() {
   const [file, setFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [selectedVideoRef, setSelectedVideoRef] = useState("videoRef1"); // State to switch between refs
+  const [selectedVideoRef, setSelectedVideoRef] = useState("videoRef1");
+  const [uniqueId, setUniqueId] = useState(() => localStorage.getItem('uniqueId')); // Retrieve unique ID from localStorage
   const videoRef1 = useRef(null);
   const videoRef2 = useRef(null);
+  const hls = useRef(null);
 
-  // Video options
   const videoOptions = [
-    { value: "videoRef1", label: "Video Heatmaps " },
-    { value: "videoRef2", label: "Video Anotasi " },
+    { value: "videoRef1", label: "Video Heatmaps" },
+    { value: "videoRef2", label: "Video Annotation" },
   ];
 
-  // Function to handle file selection
   const handleFileChange = (event) => {
     setFile(event.target.files[0]);
   };
 
-  // Function to submit the file to the backend
   const handleSubmit = async () => {
     if (!file) {
       alert("Please upload a file first!");
@@ -46,7 +45,15 @@ export function Video() {
       );
 
       if (response.status === 200) {
-        // Process successful upload here if needed
+        const newId = response.data.unique_id; // Get the new unique ID from the response
+
+        // Only update the unique ID and localStorage if it's different from the current one
+        if (newId !== uniqueId) {
+          setUniqueId(newId); // Set the new unique ID to state
+          localStorage.setItem('uniqueId', newId); // Save the new unique ID to localStorage
+        }
+
+        console.log(newId);
       } else {
         alert("Error: Unable to upload video.");
       }
@@ -58,19 +65,25 @@ export function Video() {
     }
   };
 
-  // Function to load video source based on selected reference
   const loadVideo = (ref) => {
+    if (!uniqueId) return; // Ensure uniqueId is set before loading video
+
     const video = ref.current;
     const videoSource =
       ref === videoRef1
-        ? "http://localhost:8000/heatsmap/mapsoutput.m3u8"
-        : "http://localhost:8000/hls_output/output.m3u8"; // Adjust URLs as needed
+        ? `http://localhost:8000/heatsmap/${uniqueId}/mapsoutput.m3u8`
+        : `http://localhost:8000/hls_output/${uniqueId}/output.m3u8`;
+
+    if (hls.current) {
+      hls.current.destroy();
+      hls.current = null;
+    }
 
     if (Hls.isSupported()) {
-      const hls = new Hls();
-      hls.loadSource(videoSource);
-      hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      hls.current = new Hls();
+      hls.current.loadSource(videoSource);
+      hls.current.attachMedia(video);
+      hls.current.on(Hls.Events.MANIFEST_PARSED, () => {
         video.play();
       });
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -82,17 +95,16 @@ export function Video() {
   };
 
   useEffect(() => {
-    // Load video source when selectedVideoRef changes
-    const selectedRef =
-      selectedVideoRef === "videoRef1" ? videoRef1 : videoRef2;
-    loadVideo(selectedRef);
-  }, [selectedVideoRef]);
+    if (uniqueId) {
+      const selectedRef =
+        selectedVideoRef === "videoRef1" ? videoRef1 : videoRef2;
+      loadVideo(selectedRef);
+    }
+  }, [selectedVideoRef, uniqueId]);
 
   return (
-    <div
-      className="bg-white border border-gray-200 rounded-xl p-2 sm:p-6 mx-auto w-auto xl:w-[902px] h-auto xl:h-[630px]"
-      style={{ boxShadow: "5px 7px 2px rgba(0, 0, 0, 0.6)" }}
-    >
+    <div className="bg-white border border-gray-200 rounded-xl p-2 sm:p-6 mx-auto w-auto xl:w-[902px] h-auto xl:h-[630px]"
+      style={{ boxShadow: "5px 7px 2px rgba(0, 0, 0, 0.6)" }}>
       <div className="text-center">
         <h5 className="text-2xl mb-2 font-bold tracking-tight text-gray-900">
           Human Detections
